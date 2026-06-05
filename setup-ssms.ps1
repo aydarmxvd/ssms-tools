@@ -8,7 +8,7 @@
     irm https://raw.githubusercontent.com/aydarmxvd/ssms-tools/main/setup-ssms.ps1 | iex
 .NOTES
     Author: aydarmxvd
-    Version: 1.4
+    Version: 1.5
     GitHub: https://github.com/aydarmxvd/ssms-tools
 #>
 
@@ -32,7 +32,7 @@ function Write-Menu {
     Write-Host "  [4] Install SSMS (after download)" -ForegroundColor Magenta
     Write-Host "  [5] Install Microsoft Tool" -ForegroundColor Magenta
     Write-Host "  [6] Download & Install SSMS" -ForegroundColor Red
-    Write-Host "  [7] Check downloaded files" -ForegroundColor Gray
+    Write-Host "  [7] Check downloaded files (with paths)" -ForegroundColor Gray
     Write-Host "  [8] Open Downloads folder" -ForegroundColor Gray
     Write-Host "  [9] Open 1C Login page (login.1c.ru)" -ForegroundColor Cyan
     Write-Host "  [10] Open 1C Developer portal (developer.1c.ru)" -ForegroundColor Cyan
@@ -61,25 +61,24 @@ function Download-File {
     if ($Url -like "*drive.usercontent.google.com*" -or $Url -like "*drive.google.com*") {
         Write-Host "Google Drive file detected. Starting download..." -ForegroundColor Cyan
         
-        # Для Google Drive нужно разрешить подтверждение
         try {
-            # Используем WebClient для лучшей обработки Google Drive
             $webClient = New-Object System.Net.WebClient
             $webClient.DownloadFile($Url, $outputPath)
             Write-Host "✓ SUCCESS! Downloaded: $FileName" -ForegroundColor Green
             
             $fileSize = [math]::Round((Get-Item $outputPath).Length / 1MB, 2)
             Write-Host "  Size: $fileSize MB" -ForegroundColor Gray
+            Write-Host "  Path: $outputPath" -ForegroundColor Gray
             return $true
         }
         catch {
-            # Если прямая ссылка не работает, пробуем альтернативный метод
             Write-Host "Trying alternative download method..." -ForegroundColor Yellow
             try {
                 Invoke-RestMethod -Uri $Url -OutFile $outputPath -UseBasicParsing
                 Write-Host "✓ SUCCESS! Downloaded: $FileName" -ForegroundColor Green
                 $fileSize = [math]::Round((Get-Item $outputPath).Length / 1MB, 2)
                 Write-Host "  Size: $fileSize MB" -ForegroundColor Gray
+                Write-Host "  Path: $outputPath" -ForegroundColor Gray
                 return $true
             }
             catch {
@@ -89,13 +88,13 @@ function Download-File {
         }
     }
     else {
-        # Обычное скачивание для Microsoft и других сайтов
         try {
             Invoke-RestMethod -Uri $Url -OutFile $outputPath -UseBasicParsing
             Write-Host "✓ SUCCESS! Downloaded: $FileName" -ForegroundColor Green
             
             $fileSize = [math]::Round((Get-Item $outputPath).Length / 1MB, 2)
             Write-Host "  Size: $fileSize MB" -ForegroundColor Gray
+            Write-Host "  Path: $outputPath" -ForegroundColor Gray
             return $true
         }
         catch {
@@ -105,7 +104,7 @@ function Download-File {
     }
 }
 
-# Функция проверки файлов
+# Функция проверки файлов (с отображением путей)
 function Check-Files {
     $downloadPath = "$env:USERPROFILE\Downloads"
     $files = @(
@@ -116,17 +115,46 @@ function Check-Files {
     )
     
     Write-Host ""
-    Write-Host "Checking Downloads folder..." -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "        CHECKING DOWNLOADED FILES" -ForegroundColor White
+    Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "Download folder: $downloadPath" -ForegroundColor Gray
+    Write-Host ""
+    
+    $foundCount = 0
+    $totalCount = $files.Count
     
     foreach ($file in $files) {
         $path = "$downloadPath\$($file.Name)"
         if (Test-Path $path) {
             $size = [math]::Round((Get-Item $path).Length / 1MB, 2)
-            Write-Host "  ✓ $($file.Desc): $($file.Name) ($size MB)" -ForegroundColor Green
+            $sizeGB = [math]::Round((Get-Item $path).Length / 1GB, 2)
+            
+            Write-Host "  ✓ $($file.Desc):" -ForegroundColor Green
+            Write-Host "      File: $($file.Name)" -ForegroundColor Gray
+            Write-Host "      Size: $size MB ($sizeGB GB)" -ForegroundColor Gray
+            Write-Host "      Path: $path" -ForegroundColor Cyan
+            Write-Host ""
+            $foundCount++
         } else {
             Write-Host "  ✗ $($file.Desc): $($file.Name) - NOT FOUND" -ForegroundColor Red
+            Write-Host ""
         }
+    }
+    
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Found: $foundCount of $totalCount files" -ForegroundColor $(if ($foundCount -eq $totalCount) { "Green" } else { "Yellow" })
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    
+    if ($foundCount -eq $totalCount) {
+        Write-Host "✓ All files are downloaded!" -ForegroundColor Green
+        Write-Host "  You can now use options 4, 5, 11 to install/extract" -ForegroundColor Gray
+    } elseif ($foundCount -gt 0) {
+        Write-Host "⚠ Some files are missing. Use options 1,2,11,12 to download them." -ForegroundColor Yellow
+    } else {
+        Write-Host "✗ No files found. Use options 1,2,11,12 to download." -ForegroundColor Red
     }
     Write-Host ""
 }
@@ -136,7 +164,6 @@ function Extract-Zip {
     param($ZipPath, $DestinationPath)
     
     try {
-        # Создаем папку назначения если её нет
         if (-not (Test-Path $DestinationPath)) {
             New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
         }
@@ -178,10 +205,12 @@ do {
             $ssmsPath = "$env:USERPROFILE\Downloads\SSMS_22_Setup.exe"
             if (Test-Path $ssmsPath) {
                 Write-Host "`nStarting SSMS installation..." -ForegroundColor Yellow
+                Write-Host "Installer path: $ssmsPath" -ForegroundColor Gray
                 Start-Process $ssmsPath -Wait
                 Write-Host "Installation completed!" -ForegroundColor Green
             } else {
                 Write-Host "`n✗ SSMS installer not found! Please download first (option 1 or 3)" -ForegroundColor Red
+                Write-Host "  Expected path: $ssmsPath" -ForegroundColor Gray
             }
             Write-Host "`nPress any key to continue..."
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -190,10 +219,12 @@ do {
             $toolPath = "$env:USERPROFILE\Downloads\Microsoft_Tool_Setup.exe"
             if (Test-Path $toolPath) {
                 Write-Host "`nStarting Microsoft Tool installation..." -ForegroundColor Yellow
+                Write-Host "Installer path: $toolPath" -ForegroundColor Gray
                 Start-Process $toolPath -Wait
                 Write-Host "Installation completed!" -ForegroundColor Green
             } else {
                 Write-Host "`n✗ Tool installer not found! Please download first (option 2 or 3)" -ForegroundColor Red
+                Write-Host "  Expected path: $toolPath" -ForegroundColor Gray
             }
             Write-Host "`nPress any key to continue..."
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -248,7 +279,6 @@ do {
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         }
         "11" {
-            # Прямая ссылка на утилиты с Google Drive
             $zipUrl = "https://drive.usercontent.google.com/download?id=1oDziHUB9GPKo_R8Kq0OgLaoJsw0pjGmq&export=download&confirm=t"
             $zipName = "utilities.zip"
             $extractPath = "$env:USERPROFILE\Downloads\Utilities"
@@ -269,7 +299,6 @@ do {
             $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         }
         "12" {
-            # Прямая ссылка на КриптоПро с Google Drive
             $cryptoUrl = "https://drive.usercontent.google.com/download?id=1Yb4D-IH5dGWy0M_7cClzigxU2TqhWggh&export=download&confirm=t"
             $cryptoName = "CryptoPro-5.0.13003.exe"
             
